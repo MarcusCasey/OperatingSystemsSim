@@ -1,0 +1,13 @@
+all: sim2
+sim2: harness.o Configuration.o MetaDeque.o
+	g++ -std=c++11 harness.o Configuration.o MetaDeque.o processControlBlock.o -o sim2
+Configuration.o: Configuration.cpp
+	g++ -std=c++11 -c Configuration.cpp
+harness.o: harness.cpp
+	g++ -std=c++11 -c harness.cpp
+MetaDeque.o: MetaDeque.cpp
+	g++ -std=c++11 -c MetaDeque.cpp
+processControlBlock.o: processControlBlock.cpp
+	g++ -std=c++11 -c processControlBlock.cpp
+clean:
+	rm -rf *.o sim1

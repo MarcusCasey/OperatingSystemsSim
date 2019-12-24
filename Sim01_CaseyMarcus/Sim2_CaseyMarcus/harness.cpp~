@@ -1,0 +1,1000 @@
+/*
+Marcus Casey
+CS 446
+MetaDeque CPP
+ToDo: Rewrite some variables and functions. ensure output is similar.
+*/
+
+
+
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <deque>
+#include <pthread.h>
+#include <limits.h>
+#include <time.h>
+#include "Configuration.h"
+#include "MetaDeque.h"
+#include "processControlBlock.h"
+
+using namespace std;
+
+bool detMetaInfoFile(ifstream&, Configuration, deque<MetaDeque>&);
+
+bool runProgram(Configuration, deque<MetaDeque>, int);
+bool handleProcess(Configuration, MetaDeque, PCB&);
+bool systemHandler(PCB&, string);
+bool applicationHandler(PCB&, string);
+bool processorHandler(PCB&, int);
+bool memoryHandler(PCB&, int, string, int);
+bool inputHandler(PCB&, string, int);
+bool outputHandler(PCB&, string, int);
+
+
+unsigned int generateMemoryAddress();
+bool allocateMemory(unsigned int, int);
+
+void* timer(void*);
+void* hardDriveInputHandler(void*);
+void* keyboardHandler(void*);
+void* scannerHandler(void*);
+void* hardDriveOutputHandler(void*);
+void* monitorHandler(void*);
+void* projectorHandler(void*);
+
+
+void mainOutputConfig(Configuration, deque<MetaDeque>);
+void mainOutputToMon(Configuration, deque<MetaDeque>);
+void logConfigToFile(Configuration, deque<MetaDeque>);
+
+
+int main(int argc, char *argv[]) {
+
+
+	Configuration descMetaConfigAmtD; 
+	deque<MetaDeque> mainMatrixKeyAmount;  
+
+	string metaFile;
+	bool stillParse; 
+
+
+	ifstream input;
+	for (int i = 0; i < argc; i++) {
+		input.open(argv[i]);
+		if (i > 0) {
+			descMetaConfigAmtD.detCAmtData(input);
+		}
+		input.close();
+	}
+
+	metaFile = descMetaConfigAmtD.detInputLocation();
+
+	input.open(metaFile);
+
+	stillParse = detMetaInfoFile(input, descMetaConfigAmtD, mainMatrixKeyAmount);
+	
+	input.close();
+	
+	if (stillParse) {
+		mainOutputConfig(descMetaConfigAmtD, mainMatrixKeyAmount);
+	}
+	return 1;		
+}
+
+bool detMetaInfoFile(ifstream& input, Configuration descMetaConfigAmtD, deque<MetaDeque>& mainMatrixKeyAmount) {
+	MetaDeque currentData;
+	string marker;
+	string executeDescData;
+
+	getline(input, marker);
+	marker.clear();
+
+	input >> executeDescData;
+
+	while (executeDescData[executeDescData.length() - 1] == ';') {
+
+		currentData.consumeData(executeDescData);
+		currentData.amtTime(descMetaConfigAmtD);
+		mainMatrixKeyAmount.push_back(currentData);
+		executeDescData.clear();
+		input >> executeDescData;
+		if(executeDescData.substr(2, 4) == "hard") {
+			//checking if metaTypeDesc is case "hard drive" which would stop the loop if 
+			//not accounted for		
+			string restOfInstruction;
+			input >> restOfInstruction;
+			executeDescData.append(" ");
+			executeDescData.append(restOfInstruction);
+		}
+	}
+
+	if (executeDescData[executeDescData.length() - 1] == '.') {
+		MetaDeque currentData;
+		if (!currentData.consumeData(executeDescData)) {
+			cout << "ERROR: Error in meta data" << endl;
+			return 0;
+		}
+		currentData.amtTime(descMetaConfigAmtD);
+		mainMatrixKeyAmount.push_back(currentData);
+		executeDescData.clear();
+	} 
+
+	getline(input, marker);
+	getline(input, marker);
+	marker.clear();
+	return 1;
+}
+
+
+
+void mainOutputConfig(Configuration descMetaConfigAmtD, deque<MetaDeque> MetaDeque) {
+
+	switch (descMetaConfigAmtD.detLogExport() + 1) {
+		case 1:
+			mainOutputToMon(descMetaConfigAmtD, MetaDeque);
+		break;
+		case 2:
+			logConfigToFile(descMetaConfigAmtD, MetaDeque);
+		break;
+		case 3:
+			logConfigToFile(descMetaConfigAmtD, MetaDeque);
+			mainOutputToMon(descMetaConfigAmtD, MetaDeque);
+		break;
+		default:
+			cout << "ERR: error ocurred during mainOutputConfig type selection" << endl;
+			return;
+	}
+}
+
+// output specified template from project assignment to monitor
+void mainOutputToMon(Configuration descMetaConfigAmtD, deque<MetaDeque> MetaDeque) {
+	cout << "Configuration File Data" << endl;
+	cout << "Monitor = " << descMetaConfigAmtD.detMonExport() << " ms/cycle" << endl;
+	cout << "Processor = " << descMetaConfigAmtD.detProcExport() << " ms/cycle" << endl;
+	cout << "Scanner = " << descMetaConfigAmtD.detScanExport() << " ms/cycle" << endl;
+	cout << "Hard Drive = " << descMetaConfigAmtD.detHardExport() << " ms/cycle" << endl;
+	cout << "Keyboard = " << descMetaConfigAmtD.detKeyExport() << " ms/cycle" << endl;
+	cout << "Memory = " << descMetaConfigAmtD.detMemoryExport() << " ms/cycle" << endl;
+	cout << "Projector = " << descMetaConfigAmtD.detProjExport() << " ms/cycle" << endl;
+	cout << "Logged to: ";
+	if (descMetaConfigAmtD.detLogExport() == 0) {
+		cout << "monitor" << endl;
+	}
+	else if (descMetaConfigAmtD.detLogExport() == 2) {
+		cout << "monitor and " << descMetaConfigAmtD.detOutputPath() << endl;
+	}
+	else {
+		cout << "ERROR: using incorrect mainOutputConfig handler" << endl;
+		return;
+	}
+	cout << endl;
+	cout << "Meta-Data Metrics" << endl;
+	for (int i = 0; i < MetaDeque.size(); i++) {
+		if (MetaDeque[i].detMeta() != 'S' && MetaDeque[i].detMeta() != 'A') {
+			cout << MetaDeque[i].detMeta();
+			cout << '{';
+			cout << MetaDeque[i].detMetaD();
+			cout << '}';
+			cout << MetaDeque[i].numCycle();
+			cout << " - ";
+			cout << MetaDeque[i].amtTime();
+			cout << " ms" << endl;
+		}
+	}
+}
+
+// output for file and also potentially monitor
+void logConfigToFile(Configuration descMetaConfigAmtD, deque<MetaDeque> MetaDeque) {
+	ofstream fout;
+	fout.open(descMetaConfigAmtD.detOutputPath());
+	fout << "Configuration File Data" << endl;
+	fout << "Monitor = " << descMetaConfigAmtD.detMonExport() << " ms/cycle" << endl;
+	fout << "Processor = " << descMetaConfigAmtD.detProcExport() << " ms/cycle" << endl;
+	fout << "Scanner = " << descMetaConfigAmtD.detScanExport() << " ms/cycle" << endl;
+	fout << "Hard Drive = " << descMetaConfigAmtD.detHardExport() << " ms/cycle" << endl;
+	fout << "Keyboard = " << descMetaConfigAmtD.detKeyExport() << " ms/cycle" << endl;
+	fout << "Memory = " << descMetaConfigAmtD.detMemoryExport() << " ms/cycle" << endl;
+	fout << "Projector = " << descMetaConfigAmtD.detProjExport() << " ms/cycle" << endl;
+	fout << "Logged to: ";
+	if (descMetaConfigAmtD.detLogExport() == 1) {
+		fout << descMetaConfigAmtD.detOutputPath() << endl;
+	}
+	else if (descMetaConfigAmtD.detLogExport() == 2) {
+		fout << "monitor and " << descMetaConfigAmtD.detOutputPath() << endl;
+	} else {
+		fout << "ERROR: using incorrect mainOutputConfig handler" << endl;
+		return;
+	}
+	fout << endl;
+	fout << "Meta-Data Metrics" << endl;
+	for (int i = 0; i < MetaDeque.size(); i++) {
+		if (MetaDeque[i].detMeta() != 'S' && MetaDeque[i].detMeta() != 'A') {
+			fout << MetaDeque[i].detMeta();
+			fout << '{';
+			fout << MetaDeque[i].detMetaD();
+			fout << '}';
+			fout << MetaDeque[i].numCycle();
+			fout << " - ";
+			fout << MetaDeque[i].amtTime();
+			fout << " ms" << endl;
+		}
+	}
+	fout.close();
+}
+
+bool runProgram(Configuration configData, deque<MetaDeque> program, int programNum) {
+
+	PCB programData;
+	clock_t start;
+	double duration;
+	bool okToContinue = 1;
+	
+	programData.setpid(programNum + 1);
+	programData.setStartTime(0);
+	programData.setProcessDuration(0);
+	start = clock();
+	duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+
+	switch (outputType) {
+		case 0:
+			cout << fixed << duration << " - Simulator program starting" << endl;
+		break;
+		case 1:
+			fout << fixed << duration << " - Simulator program starting" << endl;
+		break;
+		case 2:
+			cout << fixed << duration << " - Simulator program starting" << endl;
+			fout << fixed << duration << " - Simulator program starting" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+
+	for (int i = 0; i < program.size(); i++) {
+		if (okToContinue)
+		{
+			duration = ((clock() - start) / (double) CLOCKS_PER_SEC);
+			programData.setProcessDuration(duration);
+			okToContinue = handleProcess(configData, program[i], programData);
+		}
+		else {
+			return 0;
+		}
+		duration = ((clock() - start) / (double) CLOCKS_PER_SEC);
+		//cout << "clock test: " << fixed << duration << endl;
+	}
+	switch (outputType) {
+		case 0:
+			cout << fixed << duration << " - Simulator program ending" << endl;
+		break;
+		case 1:
+			fout << fixed << duration << " - Simulator program ending" << endl;
+		break;
+		case 2:
+			cout << fixed << duration << " - Simulator program ending" << endl;
+			fout << fixed << duration << " - Simulator program ending" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+	
+	return 1;
+
+}
+
+
+bool handleProcess(Configuration cData, MetaDeque process, PCB& pData) {
+
+	switch ((int) process.getCode()) {
+	
+		case (int) 'S':
+		
+			return systemHandler(pData, process.getDescriptor());
+		
+		break;
+		
+		case (int) 'A':
+		
+			return applicationHandler(pData, process.getDescriptor());
+		
+		break;
+		
+		case (int) 'P':
+		
+			return processorHandler(pData, process.getTotalTime());
+		
+		break;
+		
+		case (int) 'M':
+		
+			return memoryHandler(pData, cData.getSystemMemory(), 
+				   				 process.getDescriptor(), process.getTotalTime());
+		
+		break;
+		
+		case (int) 'I':
+		
+			return inputHandler(pData, process.getDescriptor(), process.getTotalTime());
+					
+		break;
+		
+		case (int) 'O':
+		
+			return outputHandler(pData, process.getDescriptor(), 
+				   				 process.getTotalTime());
+		
+		break;
+	
+		default:
+		
+			cout << "ERROR: Invalid code encountered in Meta Data" << endl;
+			return 0;
+	}
+}
+
+bool systemHandler(PCB& pData, string descriptor) {
+	clock_t start;
+	int pid = pData.getpid();
+	double duration;
+	start = clock();
+	if (descriptor == "begin") {
+		switch (outputType) {
+			case 0:
+				cout << pData.getProcessDuration() << " - OS: preparing process " << 
+				pid << endl;
+			break;
+			case 1:
+				fout << pData.getProcessDuration() << " - OS: preparing process " << 
+				pid << endl;
+			break;
+			case 2:
+				cout << pData.getProcessDuration() << " - OS: preparing process " << 
+				pid << endl;
+				fout << pData.getProcessDuration() << " - OS: preparing process " << 
+				pid << endl;
+			break;
+			default:
+				cout << "ERROR: Incorrect log type recorded from config file" << endl;
+				return 0;
+		}
+		duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+		pData.updateProcessDuration(duration);
+		pData.processState = 1;
+		switch (outputType) {
+			case 0:
+				cout << pData.getProcessDuration() << " - OS: starting process " << pid 
+				<< endl;
+			break;
+			case 1:
+				fout << pData.getProcessDuration() << " - OS: starting process " << pid 
+				<< endl;
+			break;
+			case 2:
+				cout << pData.getProcessDuration() << " - OS: starting process " << pid 
+				<< endl;
+				fout << pData.getProcessDuration() << " - OS: starting process " << pid 
+				<< endl;
+			break;
+			default:
+				cout << "ERROR: Incorrect log type recorded from config file" << endl;
+				return 0;
+		}
+	}
+	else if (descriptor == "finish") {
+		switch (outputType) {
+			case 0:
+				cout << pData.getProcessDuration() << " - OS: removing process " << pid 
+				<< endl;
+			break;
+			case 1:
+				fout << pData.getProcessDuration() << " - OS: removing process " << pid 
+				<< endl;
+			break;
+			case 2:
+				cout << pData.getProcessDuration() << " - OS: removing process " << pid 
+				<< endl;
+				fout << pData.getProcessDuration() << " - OS: removing process " << pid 
+				<< endl;
+			break;
+			default:
+				cout << "ERROR: Incorrect log type recorded from config file" << endl;
+				return 0;
+		}
+		pData.processState = 4;
+	} else {
+		cout << "ERROR: Incorrect descriptor recorded for Meta-Data code 'S'" << endl;
+		return 0;
+	}
+	return 1;
+}
+
+bool applicationHandler(PCB& pData, string descriptor) {
+	return 1;
+}
+
+
+bool processorHandler(PCB& pData, int processTime)
+{
+
+	pthread_t timerThread;
+	clock_t start;
+	long pTime = (long) processTime;
+	double duration;
+	int rc, pid = pData.getpid();
+	
+	start = clock();
+
+	duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+	pData.updateProcessDuration(duration);
+	switch (outputType) {
+		case 0:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": start processing action" << endl;
+		break;
+		case 1:
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": start processing action" << endl;
+		break;
+		case 2:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": start processing action" << endl;
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": start processing action" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+	
+	//running process
+	pData.processState = 2;
+	rc = pthread_create(&timerThread, NULL, &timer, (void*)pTime);
+	if (rc)
+	{
+		cout << "ERROR: return code from pthread_create() is " << rc << endl;
+		exit(-1);
+	}
+	
+	//more functionality would go here
+	
+	pthread_join(timerThread, NULL);
+	
+	pData.processState = 1;
+	duration = ((clock() - start) / (double) CLOCKS_PER_SEC) - duration;
+	pData.updateProcessDuration(duration);
+	switch (outputType) {
+		case 0:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": end processing action" << endl;
+		break;
+		case 1:
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": end processing action" << endl;
+		break;
+		case 2:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": end processing action" << endl;
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": end processing action" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+	
+	return 1;
+
+}
+
+bool memoryHandler(PCB& pData, int sysMemory, string descriptor, int processTime) {
+
+	pthread_t timerThread;
+	clock_t start;
+	long pTime = (long) processTime;
+	double duration;
+	int rc, pid = pData.getpid();
+	
+	start = clock();
+	
+	if (descriptor == "allocate") {
+		unsigned int addr;
+	
+		duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+		pData.updateProcessDuration(duration);
+		switch (outputType) {
+			case 0:
+				cout << pData.getProcessDuration() << " - Process " << pid <<
+				": allocating memory" << endl;
+			break;
+			case 1:
+				fout << pData.getProcessDuration() << " - Process " << pid <<
+				": allocating memory" << endl;
+			break;
+			case 2:
+				cout << pData.getProcessDuration() << " - Process " << pid <<
+				": allocating memory" << endl;
+				fout << pData.getProcessDuration() << " - Process " << pid <<
+				": allocating memory" << endl;
+			break;
+			default:
+				cout << "ERROR: Incorrect log type recorded from config file" << endl;
+				return 0;
+		}
+		
+		//running process
+		pData.processState = 2;
+		rc = pthread_create(&timerThread, NULL, &timer, (void*)pTime);
+		if (rc) {
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+		addr = generateMemoryAddress();
+		if (!allocateMemory(addr, sysMemory)) {
+			return 0;
+		}
+		
+		pthread_join(timerThread, NULL);
+		
+		//ending process
+		pData.processState = 1;
+		duration = ((clock() - start) / (double) CLOCKS_PER_SEC) - duration;
+		pData.updateProcessDuration(duration);
+		switch (outputType) {
+			case 0:
+				cout << pData.getProcessDuration() << " - Process " << pid << 
+				": memory allocated at 0x" << hex << addr << endl << dec;
+			break;
+			case 1:
+				fout << pData.getProcessDuration() << " - Process " << pid << 
+				": memory allocated at 0x" << hex << addr << endl << dec;
+			break;
+			case 2:
+				cout << pData.getProcessDuration() << " - Process " << pid << 
+				": memory allocated at 0x" << hex << addr << endl << dec;
+				fout << pData.getProcessDuration() << " - Process " << pid << 
+				": memory allocated at 0x" << hex << addr << endl << dec;
+			break;
+			default:
+				cout << "ERROR: Incorrect log type recorded from config file" << endl;
+				return 0;
+		}
+		
+	} else if (descriptor == "block") {
+	
+		duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+		pData.updateProcessDuration(duration);
+		switch (outputType) {
+			case 0:
+				cout << pData.getProcessDuration() << " - Process " << pid << 
+				": start memory blocking" << endl;
+			break;
+			case 1:
+				fout << pData.getProcessDuration() << " - Process " << pid << 
+				": start memory blocking" << endl;
+			break;
+			case 2:
+				cout << pData.getProcessDuration() << " - Process " << pid << 
+				": start memory blocking" << endl;
+				fout << pData.getProcessDuration() << " - Process " << pid << 
+				": start memory blocking" << endl;
+			break;
+			default:
+				cout << "ERROR: Incorrect log type recorded from config file" << endl;
+				return 0;
+		}
+	
+		//running process
+		pData.processState = 2;
+		rc = pthread_create(&timerThread, NULL, &timer, (void*)pTime);
+		if (rc) {
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+		pthread_join(timerThread, NULL);
+	
+		pData.processState = 1;
+		duration = ((clock() - start) / (double) CLOCKS_PER_SEC) - duration;
+		pData.updateProcessDuration(duration);
+		switch (outputType) {
+			case 0:
+				cout << pData.getProcessDuration() << " - Process " << pid << 
+				": end memory blocking" << endl;
+			break;
+			case 1:
+				fout << pData.getProcessDuration() << " - Process " << pid << 
+				": end memory blocking" << endl;
+			break;
+			case 2:
+				cout << pData.getProcessDuration() << " - Process " << pid << 
+				": end memory blocking" << endl;
+				fout << pData.getProcessDuration() << " - Process " << pid << 
+				": end memory blocking" << endl;
+			break;
+			default:
+				cout << "ERROR: Incorrect log type recorded from config file" << endl;
+				return 0;
+		}
+	}
+	else
+	{
+		cout << "ERROR: Incorrect descriptor recorded for Meta-Data code 'M'" << endl;
+		return 0;
+	}
+
+}
+
+bool inputHandler(PCB& pData, string descriptor, int processTime) {
+
+	pthread_t inputThread;
+	clock_t start;
+	long pTime = (long) processTime;
+	double duration;
+	int rc, pid = pData.getpid();
+	start = clock();
+	duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+	pData.updateProcessDuration(duration);
+	switch (outputType) {
+		case 0:
+			cout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " input" << endl;
+		break;
+		case 1:
+			fout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " input" << endl;
+		break;
+		case 2:
+			cout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " input" << endl;
+			fout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " input" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+	
+	if (descriptor == "hard drive") {
+	
+		pData.processState = 2;
+		rc = pthread_create(&inputThread, NULL, &hardDriveInputHandler, (void*)pTime);
+		if (rc) {
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+	}
+	else if (descriptor == "keyboard") {
+	
+		pData.processState = 2;
+		rc = pthread_create(&inputThread, NULL, &keyboardHandler, (void*)pTime);
+		if (rc) {
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+	}
+	else if (descriptor == "scanner") {
+		pData.processState = 2;
+		rc = pthread_create(&inputThread, NULL, &scannerHandler, (void*)pTime);
+		if (rc) {
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+	}
+	else {
+		cout << "ERROR: Incorrect descriptor recorded for Meta-Data code 'I'" << endl;
+		return 0;
+	}
+	pData.processState = 3;
+	pthread_join(inputThread, NULL);
+
+	pData.processState = 1;
+	duration = ((clock() - start) / (double) CLOCKS_PER_SEC) - duration;
+	pData.updateProcessDuration(duration);
+	switch (outputType) {
+		case 0:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " input" << endl;
+		break;
+		case 1:
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " input" << endl;
+		break;
+		case 2:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " input" << endl;
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " input" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+	return 1;
+
+}
+
+bool outputHandler(PCB& pData, string descriptor, int processTime) {
+
+	pthread_t outputThread;
+	clock_t start;
+	long pTime = (long) processTime;
+	double duration;
+	int rc, pid = pData.getpid();
+	
+	start = clock();
+	
+
+	duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+	pData.updateProcessDuration(duration);
+	switch (outputType) {
+		case 0:
+			cout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " output" << endl;
+		break;
+		case 1:
+			fout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " output" << endl;
+		break;
+		case 2:
+			cout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " output" << endl;
+			fout << pData.getProcessDuration() << " - Process " << pid <<
+			": start " << descriptor << " output" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+	
+	if (descriptor == "hard drive") {
+	
+		//running process
+		pData.processState = 2;
+		rc = pthread_create(&outputThread, NULL, &hardDriveOutputHandler, (void*)pTime);
+		if (rc)
+		{
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+	
+	}
+	else if (descriptor == "monitor") {
+	
+		//running process
+		pData.processState = 2;
+		rc = pthread_create(&outputThread, NULL, &monitorHandler, (void*)pTime);
+		if (rc) {
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+	
+	} else if (descriptor == "projector")
+	{
+	
+		//running process
+		pData.processState = 2;
+		rc = pthread_create(&outputThread, NULL, &projectorHandler, (void*)pTime);
+		if (rc)
+		{
+			cout << "ERROR: return code from pthread_create() is " << rc << endl;
+			exit(-1);
+		}
+	
+	} else {
+		cout << "ERROR: Incorrect descriptor recorded for Meta-Data code 'I'" << endl;
+		return 0;
+	}
+	
+
+	pData.processState = 3;
+	
+	pthread_join(outputThread, NULL);
+	
+	//ending process
+	pData.processState = 1;
+	duration = ((clock() - start) / (double) CLOCKS_PER_SEC) - duration;
+	pData.updateProcessDuration(duration);
+	switch (outputType) {
+		case 0:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " output" << endl;
+		break;
+		case 1:
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " output" << endl;
+		break;
+		case 2:
+			cout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " output" << endl;
+			fout << pData.getProcessDuration() << " - Process " << pid << 
+			": end " << descriptor << " output" << endl;
+		break;
+		default:
+			cout << "ERROR: Incorrect log type recorded from config file" << endl;
+			return 0;
+	}
+	
+	return 1;
+
+}
+
+
+unsigned int generateMemoryAddress() {
+
+	//generating and assigning random integer value to address
+	unsigned int address;
+	
+	srand (time(NULL));
+	
+	address = rand() % UINT_MAX;
+	return address;
+
+}
+
+bool allocateMemory(unsigned int address, int amount)
+{
+
+	return 1;
+
+}
+
+/**
+*	Function: timer
+*	Description: A thread that starts a timer from the parameter milliseconds down to 
+*		zero. Thread is exited once the timer is finished.
+*/
+void* timer(void* milliseconds)
+{
+
+	long m = (long) milliseconds;
+	
+	clock_t timerEnd = clock() + m * CLOCKS_PER_SEC/1000;
+	while(clock() < timerEnd) {};
+
+}
+
+/**
+*	Function: hardDriveInputHandler
+*	Description: A thread that handles an input process from the hard drive. Currently 
+*	there are no processes to be performed, so this function does nothing but wait for 
+*	the timer thread to finish
+*/
+void* hardDriveInputHandler(void* hdTime)
+{
+
+	pthread_t timerThread;
+	int rc;
+
+	rc = pthread_create(&timerThread, NULL, &timer, (void*)hdTime);
+	if (rc)
+	{
+		cout << "ERROR: return code from pthread_create() is " << rc << endl;
+		exit(-1);
+	}
+	
+	pthread_join(timerThread, NULL);
+
+}
+
+/**
+*	Function: keyboardHandler
+*	Description: A thread that handles an input process from the keyboard. Currently 
+*	there are no processes to be performed, so this function does nothing but wait for 
+*	the timer thread to finish
+*/
+void* keyboardHandler(void* kTime)
+{
+
+	pthread_t timerThread;
+	int rc;
+
+	rc = pthread_create(&timerThread, NULL, &timer, (void*)kTime);
+	if (rc)
+	{
+		cout << "ERROR: return code from pthread_create() is " << rc << endl;
+		exit(-1);
+	}
+	
+	pthread_join(timerThread, NULL);
+
+}
+
+/**
+*	Function: scannerHandler
+*	Description: A thread that handles an input process from the scanner. Currently 
+*	there are no processes to be performed, so this function does nothing but wait for 
+*	the timer thread to finish
+*/
+void* scannerHandler(void* sTime)
+{
+
+	pthread_t timerThread;
+	int rc;
+
+	rc = pthread_create(&timerThread, NULL, &timer, (void*)sTime);
+	if (rc)
+	{
+		cout << "ERROR: return code from pthread_create() is " << rc << endl;
+		exit(-1);
+	}
+	
+	pthread_join(timerThread, NULL);
+
+}
+
+/**
+*	Function: hardDriveOutputHandler
+*	Description: A thread that handles an output process from the hard drive. Currently 
+*	there are no processes to be performed, so this function does nothing but wait for 
+*	the timer thread to finish
+*/
+void* hardDriveOutputHandler(void* hdTime)
+{
+
+	pthread_t timerThread;
+	int rc;
+
+	rc = pthread_create(&timerThread, NULL, &timer, (void*)hdTime);
+	if (rc)
+	{
+		cout << "ERROR: return code from pthread_create() is " << rc << endl;
+		exit(-1);
+	}
+	
+	pthread_join(timerThread, NULL);
+
+}
+
+/**
+*	Function: monitorHandler
+*	Description: A thread that handles an output process from the monitor. Currently 
+*	there are no processes to be performed, so this function does nothing but wait for 
+*	the timer thread to finish
+*/
+void* monitorHandler(void* mTime)
+{
+
+	pthread_t timerThread;
+	int rc;
+
+	rc = pthread_create(&timerThread, NULL, &timer, (void*)mTime);
+	if (rc)
+	{
+		cout << "ERROR: return code from pthread_create() is " << rc << endl;
+		exit(-1);
+	}
+	
+	pthread_join(timerThread, NULL);
+
+}
+
+/**
+*	Function: projectorHandler
+*	Description: A thread that handles an output process from the projector. Currently 
+*	there are no processes to be performed, so this function does nothing but wait for 
+*	the timer thread to finish
+*/
+void* projectorHandler(void* pTime)
+{
+
+	pthread_t timerThread;
+	int rc;
+
+	rc = pthread_create(&timerThread, NULL, &timer, (void*)pTime);
+	if (rc)
+	{
+		cout << "ERROR: return code from pthread_create() is " << rc << endl;
+		exit(-1);
+	}
+	
+	pthread_join(timerThread, NULL);
+
+}
+
+
+
+
+
+
